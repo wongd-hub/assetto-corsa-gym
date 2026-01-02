@@ -37,19 +37,46 @@ uv run main.py read --rate 10 --json-output data/telemetry.jsonl
 assetto-corsa-gym/
 ├── ac_bridge/
 │   ├── telemetry/
-│   │   ├── ac_native_memory.py    # Primary: Native AC shared memory
-│   │   ├── ac_shared_memory.py    # Fallback: pyaccsharedmemory wrapper
+│   │   ├── ac_native_memory.py    # Native AC shared memory reader
 │   │   └── __init__.py
+│   ├── websocket_server.py        # WebSocket streaming server
 │   ├── control/                   # (Future) vJoy/ViGEm control output
 │   └── client.py
 ├── docs/
 │   ├── README.md                  # This file
 │   └── telemetry.md               # Telemetry documentation
+├── examples/
+│   ├── websocket_client.py        # Example WebSocket client
+│   └── README.md                  # Examples documentation
 ├── main.py                        # CLI entry point
 └── pyproject.toml                 # Dependencies
 ```
 
 ## Commands
+
+### stream
+
+Stream telemetry over WebSocket for local development.
+
+```bash
+uv run main.py stream [OPTIONS]
+```
+
+Options:
+- `--host HOST` - Server host (default: localhost)
+- `--port PORT` - Server port (default: 8765)
+- `--rate N` - Broadcast rate in Hz (default: 10)
+
+This starts a WebSocket server that broadcasts telemetry to all connected clients. Multiple clients can connect simultaneously.
+
+Example workflow:
+```bash
+# Terminal 1: Start stream
+uv run main.py stream --rate 10
+
+# Terminal 2: Connect client
+uv run examples/websocket_client.py
+```
 
 ### read
 
@@ -62,8 +89,6 @@ uv run main.py read [OPTIONS]
 Options:
 - `--rate N` - Polling rate in Hz (default: 10)
 - `--json-output PATH` - Export telemetry to JSONL file
-- `--native` - Use native AC shared memory (default)
-- `--acc-lib` - Use pyaccsharedmemory library (fallback)
 
 ## Requirements
 

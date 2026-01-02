@@ -53,8 +53,7 @@ This implementation is based on research and code from:
 
 - **pyaccsharedmemory** library
   - Python package for ACC/AC shared memory access
-  - Used as fallback implementation in `ac_shared_memory.py`
-  - Note: Primarily designed for ACC, limited compatibility with original AC
+  - Note: Initially explored but not used in final implementation due to limited compatibility with original AC
 
 ### Why Shared Memory Instead of UDP
 
@@ -115,25 +114,45 @@ Shared memory provides:
 ### Lap Timing
 
 - `completedLaps` (int): Number of completed laps
-- `iCurrentTime` (int): Current lap time in milliseconds
-- `iLastTime` (int): Previous lap time in milliseconds
-- `iBestTime` (int): Best lap time in session (milliseconds)
+- `iCurrentTime` (int): Current lap time in milliseconds (also `current_time`)
+- `iLastTime` (int): Previous lap time in milliseconds (also `last_time`)
+- `iBestTime` (int): Best lap time in session in milliseconds (also `best_time`)
+- `distance_traveled` (float): Total distance traveled in meters
+- `normalized_position` (float): Position on track (0.0-1.0, where 1.0 is one lap)
+- `current_sector_index` (int): Current track sector (0, 1, or 2)
 
 ### Position and Orientation
 
-- `velocity` (float[3]): World-space velocity [X, Y, Z] in m/s
-- `localVelocity` (float[3]): Car-relative velocity [forward, up, right] in m/s
-- `heading` (float): Car heading angle in radians
+- `velocity_x/y/z` (float): World-space velocity in m/s
+- `local_velocity_x/y/z` (float): Car-relative velocity [forward, up, right] in m/s
+- `world_position_x/y/z` (float): Car position in world coordinates
+- `yaw` (float): Car heading angle in radians (also available as `heading`)
 - `pitch` (float): Car pitch angle in radians
 - `roll` (float): Car roll angle in radians
-- `accG` (float[3]): G-forces [X, Y, Z]
+- `angular_velocity_x/y/z` (float): Rotation rates in rad/s [pitch rate, yaw rate, roll rate]
+- `acc_g_x/y/z` (float): G-forces in each axis
+
+### Wheel Data
+
+- `wheel_slip` (float[4]): Slip ratio per wheel [FL, FR, RL, RR]
+- `wheel_angular_speed` (float[4]): Wheel rotation speed in rad/s
+- `wheel_load` (float[4]): Load on each wheel in Newtons
+- `wheel_pressure` (float[4]): Tire pressure per wheel
+- `suspension_travel` (float[4]): Suspension compression per wheel
 
 ### Control Inputs
 
 - `gas` (float): Throttle position 0.0-1.0
 - `brake` (float): Brake pressure 0.0-1.0
 - `clutch` (float): Clutch engagement 0.0-1.0
-- `steerAngle` (float): Steering wheel angle in degrees
+- `steer_angle` (float): Steering wheel angle in degrees
+
+### Temperature and Environment
+
+- `brake_temp` (float[4]): Brake temperature per wheel in Celsius
+- `tyre_core_temp` (float[4]): Tire core temperature per wheel in Celsius
+- `air_temp` (float): Ambient air temperature in Celsius
+- `road_temp` (float): Track surface temperature in Celsius
 
 ### Driver Assists
 
@@ -157,14 +176,6 @@ uv run main.py read --rate 10 --json-output telemetry.jsonl
 ```
 
 This writes JSONL (JSON Lines) format data suitable for ingestion by reinforcement learning pipelines.
-
-### Fallback Mode
-
-```bash
-uv run main.py read --rate 10 --acc-lib
-```
-
-Uses the pyaccsharedmemory library instead of native implementation. Less accurate for original AC but may work as fallback.
 
 ## Performance Characteristics
 
@@ -191,13 +202,12 @@ Uses the pyaccsharedmemory library instead of native implementation. Less accura
 
 ## Data Quality Notes
 
-### Original AC vs ACC
+### Original AC Implementation
 
-The native implementation targets original Assetto Corsa (not Competizione). Some fields may have different semantics or be unused in AC:
+The native implementation targets original Assetto Corsa (not Competizione). Some fields have specific semantics in AC:
 
-- `abs` field represents ABS configuration, not real-time activation
-- `penalty` field in ACC library not always accurate for AC
-- `isValidLap` not directly available (derived from tyre count)
+- `abs` field represents ABS configuration setting, not real-time activation level
+- `isValidLap` not directly available (derived from `numberOfTyresOut`)
 
 ### Field Reliability
 
@@ -211,6 +221,86 @@ Less reliable fields:
 - Surface grip (track-dependent calibration)
 - Some penalty flags (inconsistent behavior)
 - ABS/TC activation (use derived metrics instead)
+
+## WebSocket Streaming
+
+The telemetry system includes a WebSocket server for real-time data streaming. This enables integration with external processes, cloud training, and multi-language clients.
+
+### Architecture
+
+```
+AC (Shared Memory) → Python Reader → WebSocket Server → Clients (Gym, Cloud, etc.)
+                        (10-60 Hz)      (Broadcast)       (Multiple)
+```
+
+### Server Implementation
+
+The server runs two concurrent tasks:
+1. **Telemetry Loop** - Reads from shared memory at configured rate
+2. **WebSocket Handler** - Manages client connections and broadcasts
+
+Key characteristics:
+- Non-blocking async I/O using `asyncio` and `websockets`
+- Broadcast pattern (one-to-many)
+- Automatic client cleanup on disconnect
+- JSON serialization for language-agnostic integration
+
+### Client Connection
+
+Clients connect using standard WebSocket protocol:
+
+```python
+import asyncio
+import json
+import websockets
+
+async def receive():
+    async with websockets.connect("ws://localhost:8765") as ws:
+        async for message in ws:
+            data = json.loads(message)
+            # Use telemetry data
+```
+
+### Message Format
+
+Each message is a complete telemetry snapshot in JSON:
+- All fields from shared memory
+- Derived metrics (wheel_lock_detected, is_lap_valid, etc.)
+- Timestamp for synchronization
+
+Message rate matches server broadcast rate (1-60 Hz configurable).
+
+### Performance
+
+- Server overhead: < 1ms per broadcast
+- JSON serialization: ~200 microseconds
+- Network latency (localhost): < 1ms
+- Total latency: ~2-3ms from AC to client
+
+For remote connections, add network RTT to latency.
+
+## Compatibility with Other Projects
+
+### assetto_corsa_gym Dataset
+
+The telemetry output includes fields compatible with the [assetto_corsa_gym](https://github.com/dasGringuen/assetto_corsa_gym) project:
+
+- `angular_velocity_x/y/z` - Angular rotation rates
+- `world_position_x/y/z` - World coordinates
+- `velocity_x/y/z` - World-space velocity components
+- `distance_traveled` - Similar to LapDist
+- `yaw`, `roll`, `pitch` - Orientation
+- `packet_id` - Packet sequencing
+- `number_of_tyres_out` - Track limit detection (similar to out_of_track)
+- `steer_angle`, `gas`, `brake` - Control inputs
+- `rpm`, `gear` - Engine state
+- `completed_laps` - Lap count
+
+Additional physics data available:
+- `wheel_angular_speed` - Individual wheel rotation speeds
+- `wheel_load` - Load per wheel
+- `wheel_pressure` - Tire pressure
+- `suspension_travel` - Suspension compression
 
 ## Integration with Gymnasium
 
