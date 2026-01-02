@@ -6,5 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "click>=8.3.1",
+    "pyaccsharedmemory>=1.0.0",
     "requests>=2.32.5",
+    "structlog>=25.5.0",
 ]
