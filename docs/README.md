@@ -30,6 +30,7 @@ uv run main.py read --rate 10 --json-output data/telemetry.jsonl
 ## Documentation
 
 - [Telemetry System](telemetry.md) - Detailed documentation on telemetry implementation, data fields, and integration
+- [Cloud Setup Guide](cloud_setup.md) - Complete guide for streaming telemetry to EC2 or other cloud servers
 
 ## Project Structure
 
@@ -77,6 +78,32 @@ uv run main.py stream --rate 10
 # Terminal 2: Connect client
 uv run examples/websocket_client.py
 ```
+
+### cloud
+
+Stream telemetry to remote cloud server (EC2, VPS, etc.).
+
+```bash
+uv run main.py cloud --uri ws://YOUR_SERVER_IP:8765 [OPTIONS]
+```
+
+Options:
+- `--uri URI` - Remote WebSocket server URI (required)
+- `--rate N` - Send rate in Hz (default: 10)
+- `--reconnect-delay N` - Seconds between reconnect attempts (default: 5)
+
+This mode is for cloud training. Your Windows machine connects TO the cloud server, bypassing NAT/firewall issues.
+
+Example workflow:
+```bash
+# On EC2: Start receiver
+python examples/cloud_server.py --host 0.0.0.0 --port 8765
+
+# On Windows: Connect and stream
+uv run main.py cloud --uri ws://ec2-ip:8765 --rate 10
+```
+
+See [Cloud Setup Guide](cloud_setup.md) for complete instructions.
 
 ### read
 

@@ -2,32 +2,43 @@
 
 ## WebSocket Telemetry Streaming
 
-### Server (Telemetry Stream)
+### Local Development Mode
 
-Start the WebSocket server to broadcast AC telemetry:
+Start a WebSocket server on your local machine:
 
 ```bash
 uv run main.py stream --host localhost --port 8765 --rate 10
 ```
 
-This will:
-1. Read telemetry from AC at 10 Hz
-2. Broadcast JSON data to all connected WebSocket clients
-3. Handle multiple simultaneous connections
-
-### Client (Receiving Telemetry)
-
-Connect to the stream with the example client:
+Then connect with the example client:
 
 ```bash
 uv run examples/websocket_client.py
 ```
 
-This demonstrates:
-- Connecting to the WebSocket server
-- Parsing JSON telemetry data
-- Displaying key metrics
-- Detecting events (wheel lock, off-track, damage)
+This is useful for:
+- Local testing and development
+- Running Gymnasium environments on same machine
+- Quick prototyping
+
+### Cloud Training Mode
+
+Stream telemetry to a remote server (EC2, VPS, etc.):
+
+```bash
+# On EC2: Start receiver
+python examples/cloud_server.py --host 0.0.0.0 --port 8765
+
+# On Windows: Connect and stream
+uv run main.py cloud --uri ws://your-ec2-ip:8765 --rate 10
+```
+
+This enables:
+- Cloud-based RL training with home AC setup
+- Training on GPU instances while playing at home
+- No port forwarding or VPN needed
+
+See [Cloud Setup Guide](../docs/cloud_setup.md) for detailed instructions.
 
 ### Custom Client
 

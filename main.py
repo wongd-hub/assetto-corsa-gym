@@ -86,6 +86,61 @@ def stream(host: str, port: int, rate: int):
 
 @cli.command()
 @click.option(
+    '--uri',
+    required=True,
+    help='Remote WebSocket server URI (e.g., ws://ec2-instance.com:8765 or wss://secure.com:8765)',
+    type=str
+)
+@click.option(
+    '--rate',
+    default=10,
+    help='Telemetry send rate in Hz (default: 10)',
+    type=int
+)
+@click.option(
+    '--reconnect-delay',
+    default=5,
+    help='Seconds to wait before reconnecting (default: 5)',
+    type=int
+)
+def cloud(uri: str, rate: int, reconnect_delay: int):
+    """
+    Stream telemetry to remote cloud server (e.g., EC2).
+    
+    This mode connects TO a remote WebSocket server, allowing your
+    home Windows machine (behind NAT) to stream data to the cloud.
+    
+    The remote server must be running and accepting WebSocket connections.
+    Use wss:// for secure connections (recommended for production).
+    
+    Examples:
+        uv run main.py cloud --uri ws://your-ec2-ip:8765 --rate 10
+        uv run main.py cloud --uri wss://secure.example.com:8765 --rate 30
+    
+    See examples/cloud_server.py for a simple receiving server.
+    """
+    import asyncio
+    from ac_bridge.websocket_client import TelemetryClient
+    
+    click.echo("\n" + "="*70)
+    click.echo("ASSETTO CORSA CLOUD TELEMETRY STREAM")
+    click.echo("="*70)
+    click.echo(f"\nConnecting to: {uri}")
+    click.echo(f"Send rate: {rate} Hz")
+    click.echo(f"Auto-reconnect: {reconnect_delay}s delay")
+    click.echo("\nPress Ctrl+C to stop\n")
+    
+    client = TelemetryClient(uri=uri, rate_hz=rate, reconnect_delay=reconnect_delay)
+    
+    try:
+        asyncio.run(client.start())
+    except KeyboardInterrupt:
+        click.echo("\n\nStopping client...")
+        client.stop()
+
+
+@cli.command()
+@click.option(
     '--rate',
     default=10,
     help='Telemetry read rate in Hz (default: 10)',

@@ -20,17 +20,20 @@ uv sync
 
 # Start AC and begin driving
 
-# Option 1: Stream over WebSocket (recommended for integration)
+# Option 1: Stream to cloud (EC2, VPS) for training
+uv run main.py cloud --uri ws://your-server:8765 --rate 10
+
+# Option 2: Stream locally (development/testing)
 uv run main.py stream --rate 10
 
-# Option 2: Read and display in console
+# Option 3: Read and display in console
 uv run main.py read --rate 10
 
-# Option 3: Export to JSON file
+# Option 4: Export to JSON file
 uv run main.py read --rate 10 --json-output telemetry.jsonl
 ```
 
-See [examples/](examples/) for client connection examples.
+See [examples/](examples/) for client connection examples and [docs/cloud_setup.md](docs/cloud_setup.md) for cloud training setup.
 
 ## Documentation
 
