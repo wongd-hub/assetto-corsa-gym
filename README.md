@@ -5,12 +5,13 @@ A telemetry bridge for connecting Assetto Corsa to Gymnasium reinforcement learn
 ## Features
 
 - Real-time telemetry reading via shared memory (sub-millisecond latency)
+- Low-latency control via vJoy (3-8ms total latency)
 - WebSocket streaming for local development and integration
 - Comprehensive car state data (physics, damage, lap timing, track limits)
 - Derived metrics for RL training (wheel lock detection, lap validity, damage levels)
 - JSON export for training pipelines
 - Multiple client support (broadcast to many consumers simultaneously)
-- Configurable polling rates (1-60 Hz)
+- Configurable polling rates (1-60 Hz for telemetry, up to 100 Hz for control)
 
 ## Quick Start
 
@@ -18,19 +19,29 @@ A telemetry bridge for connecting Assetto Corsa to Gymnasium reinforcement learn
 # Install dependencies
 uv sync
 
-# Start AC and begin driving
+# Install the CLI tool
+uv pip install -e .
 
-# Option 1: Stream to cloud (EC2, VPS) for training
-uv run main.py cloud --uri ws://your-server:8765 --rate 10
+# Start AC and begin driving, then test the connection:
+uv run ac-bridge test-telemetry --hz 10
 
-# Option 2: Stream locally (development/testing)
-uv run main.py stream --rate 10
+# Test control output (interactive)
+uv run ac-bridge test-control
 
-# Option 3: Read and display in console
-uv run main.py read --rate 10
+# Run full integration smoke test
+uv run ac-bridge smoke-test
 
-# Option 4: Export to JSON file
-uv run main.py read --rate 10 --json-output telemetry.jsonl
+# Run main bridge loop (telemetry + control)
+uv run ac-bridge run --hz 60 --controller vjoy
+
+# Stream telemetry locally (development/testing)
+uv run ac-bridge stream --rate 10
+
+# Stream to cloud (EC2, VPS) for training
+uv run ac-bridge cloud --uri ws://your-server:8765 --rate 10
+
+# Reset session in AC
+uv run ac-bridge reset
 ```
 
 See [examples/](examples/) for client connection examples and [docs/cloud_setup.md](docs/cloud_setup.md) for cloud training setup.
@@ -40,15 +51,24 @@ See [examples/](examples/) for client connection examples and [docs/cloud_setup.
 See [docs/](docs/) for detailed documentation:
 
 - [Telemetry System](docs/telemetry.md) - Implementation details, field descriptions, integration guide
+- [Control System](docs/control.md) - vJoy setup, control API, latency optimization
+- [Cloud Setup Guide](docs/cloud_setup.md) - Streaming telemetry and control to/from EC2
 - [Quick Start Guide](docs/README.md) - Installation and usage
 
-## Key Telemetry Metrics
+## Key Features
 
+**Telemetry Metrics:**
 - Track limits: `numberOfTyresOut`, `is_lap_valid`
 - Wheel dynamics: `wheelSlip`, `wheel_lock_detected`
 - Damage: `bodywork_damaged`, `tyre_wear`
 - Lap timing: `completedLaps`, `iCurrentTime`, `iBestTime`
-- Physics: `velocity`, `accG`, control inputs
+- Physics: `velocity`, `accG`, `angular_velocity`
+
+**Control Inputs:**
+- Throttle, brake, clutch (0.0-1.0)
+- Steering (-1.0 to 1.0)
+- Gear shifting (sequential or H-pattern)
+- Fast updates: 3-8ms latency, up to 100 Hz
 
 ## Requirements
 
