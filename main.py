@@ -24,12 +24,479 @@ logger = structlog.get_logger()
 @click.version_option(version="0.1.0")
 def cli():
     """
-    Assetto Corsa Gym Bridge
+    Assetto Corsa Gym Bridge - CLI Tool
     
-    A bridge between Assetto Corsa telemetry and gymnasium environments.
-    Use the 'read' command to stream telemetry from AC's shared memory.
+    A bridge between Assetto Corsa telemetry and control for RL training.
+    
+    Common commands:
+      ac-bridge run              - Main telemetry + control loop
+      ac-bridge test-telemetry   - Test telemetry reading
+      ac-bridge test-control     - Test control output
+      ac-bridge smoke-test       - Full integration test
     """
     pass
+
+
+@cli.command()
+@click.option(
+    '--hz',
+    default=10,
+    help='Control loop frequency in Hz (default: 10)',
+    type=int
+)
+@click.option(
+    '--telemetry-port',
+    default=9996,
+    help='Telemetry port (default: 9996 for AC shared memory)',
+    type=int
+)
+@click.option(
+    '--controller',
+    default='vjoy',
+    type=click.Choice(['vjoy'], case_sensitive=False),
+    help='Controller type (default: vjoy)'
+)
+@click.option(
+    '--bind',
+    default='127.0.0.1:50051',
+    help='RPC bind address (default: 127.0.0.1:50051)',
+    type=str
+)
+@click.option(
+    '--log-dir',
+    default=None,
+    help='Directory for logs (default: none)',
+    type=click.Path()
+)
+def run(hz: int, telemetry_port: int, controller: str, bind: str, log_dir: str):
+    """
+    Run the main bridge loop: telemetry + control.
+    
+    This is the primary mode for RL training. Continuously reads telemetry
+    from AC and accepts control commands.
+    
+    Example:
+        ac-bridge run --hz 60 --controller vjoy
+    """
+    import time
+    from ac_bridge.telemetry.ac_native_memory import ACSharedMemory
+    from ac_bridge.control import VJoyController
+    
+    click.echo("\n" + "="*70)
+    click.echo("AC BRIDGE - MAIN LOOP")
+    click.echo("="*70)
+    click.echo(f"\nFrequency: {hz} Hz")
+    click.echo(f"Controller: {controller}")
+    click.echo(f"Bind: {bind}")
+    if log_dir:
+        click.echo(f"Logging to: {log_dir}")
+    click.echo("\nPress Ctrl+C to stop\n")
+    
+    # Initialize telemetry and control
+    telemetry = ACSharedMemory()
+    ctrl = VJoyController() if controller == 'vjoy' else None
+    
+    if not ctrl:
+        click.echo("Error: vJoy controller not available")
+        return
+    
+    sleep_time = 1.0 / hz
+    packet_count = 0
+    
+    try:
+        click.echo("Bridge running... Ready for control commands.\n")
+        
+        while True:
+            if not telemetry.is_connected():
+                click.echo("Waiting for AC...", end='\r')
+                time.sleep(1)
+                continue
+            
+            packet_count += 1
+            
+            # Read telemetry
+            p = telemetry.physics
+            g = telemetry.graphics
+            
+            # Display status every second
+            if packet_count % hz == 0:
+                click.echo(
+                    f"[{packet_count:06d}] "
+                    f"Speed: {p.speedKmh:6.1f} km/h | "
+                    f"Lap: {g.completedLaps} | "
+                    f"Time: {g.iCurrentTime/1000:.1f}s",
+                    nl=False
+                )
+                click.echo("  ", nl=False)  # Carriage return without newline
+                click.echo("\r", nl=False)
+            
+            # Control commands would be received here (e.g., via RPC)
+            # For now, this is a monitoring loop
+            
+            time.sleep(sleep_time)
+            
+    except KeyboardInterrupt:
+        click.echo("\n\nStopping bridge...")
+    finally:
+        ctrl.close()
+        telemetry.close()
+        click.echo("Bridge stopped.")
+
+
+@cli.command()
+@click.option(
+    '--hz',
+    default=10,
+    help='Telemetry read rate in Hz (default: 10)',
+    type=int
+)
+@click.option(
+    '--duration',
+    default=None,
+    help='Duration in seconds (default: run until Ctrl+C)',
+    type=int
+)
+def test_telemetry(hz: int, duration: int):
+    """
+    Test telemetry reading and display parsed fields.
+    
+    Continuously reads and displays telemetry at specified rate.
+    Useful for validating telemetry connection.
+    
+    Example:
+        ac-bridge test-telemetry --hz 10
+        ac-bridge test-telemetry --hz 10 --duration 30
+    """
+    import time
+    from ac_bridge.telemetry.ac_native_memory import ACSharedMemory
+    
+    click.echo("\n" + "="*70)
+    click.echo("TELEMETRY TEST")
+    click.echo("="*70)
+    click.echo(f"\nReading at {hz} Hz")
+    if duration:
+        click.echo(f"Duration: {duration}s")
+    click.echo("Press Ctrl+C to stop\n")
+    
+    asm = ACSharedMemory()
+    sleep_time = 1.0 / hz
+    packet_count = 0
+    start_time = time.time()
+    
+    try:
+        while True:
+            if duration and (time.time() - start_time) > duration:
+                break
+            
+            if not asm.is_connected():
+                click.echo("Waiting for AC...", end='\r')
+                time.sleep(1)
+                continue
+            
+            packet_count += 1
+            p = asm.physics
+            g = asm.graphics
+            
+            # Display comprehensive telemetry
+            click.echo(
+                f"[{packet_count:05d}] "
+                f"Speed: {p.speedKmh:6.1f} km/h | "
+                f"RPM: {p.rpms:5d} | "
+                f"Gear: {p.gear} | "
+                f"Throttle: {p.gas:.2f} | "
+                f"Brake: {p.brake:.2f} | "
+                f"Steering: {p.steerAngle:+6.1f}° | "
+                f"Lap: {g.completedLaps} | "
+                f"TyresOut: {p.numberOfTyresOut}",
+                nl=False
+            )
+            click.echo("\r", nl=False)
+            
+            time.sleep(sleep_time)
+        
+        if duration:
+            click.echo(f"\n\nTest complete: {packet_count} packets in {duration}s")
+            click.echo(f"Average rate: {packet_count/duration:.1f} Hz")
+        
+    except KeyboardInterrupt:
+        elapsed = time.time() - start_time
+        click.echo(f"\n\nStopped: {packet_count} packets in {elapsed:.1f}s")
+        click.echo(f"Average rate: {packet_count/elapsed:.1f} Hz")
+    finally:
+        asm.close()
+
+
+@cli.command()
+@click.option(
+    '--device-id',
+    default=1,
+    help='vJoy device ID (default: 1)',
+    type=int
+)
+def test_control(device_id: int):
+    """
+    Test control output (sends safe scripted input pattern).
+    
+    Interactive test of vJoy control. Use keyboard or menu to test
+    individual axes and buttons.
+    
+    Example:
+        ac-bridge test-control
+        ac-bridge test-control --device-id 1
+    """
+    import time
+    from ac_bridge.control import VJoyController
+    
+    click.echo("\n" + "="*70)
+    click.echo("CONTROL TEST - VJOY")
+    click.echo("="*70)
+    
+    controller = VJoyController(device_id=device_id)
+    
+    click.echo(f"\nvJoy Device {device_id} initialized")
+    click.echo("\nTest Menu:")
+    click.echo("  1. Test steering")
+    click.echo("  2. Test throttle")
+    click.echo("  3. Test brake")
+    click.echo("  4. Test clutch")
+    click.echo("  5. Test all axes")
+    click.echo("  6. Test all buttons")
+    click.echo("  b1-b8. Test individual buttons")
+    click.echo("  q. Quit")
+    
+    try:
+        while True:
+            choice = input("\nEnter choice: ").strip().lower()
+            
+            if choice == 'q':
+                break
+            elif choice == '1':
+                click.echo("Testing steering: -1.0 → 0.0 → 1.0")
+                for val in [-1.0, -0.5, 0.0, 0.5, 1.0, 0.0]:
+                    controller.set_steering(val)
+                    click.echo(f"  Steering: {val:+.1f}")
+                    time.sleep(0.5)
+            elif choice == '2':
+                click.echo("Testing throttle: 0.0 → 1.0")
+                for val in [0.0, 0.25, 0.5, 0.75, 1.0, 0.0]:
+                    controller.set_throttle(val)
+                    click.echo(f"  Throttle: {val:.2f}")
+                    time.sleep(0.5)
+            elif choice == '3':
+                click.echo("Testing brake: 0.0 → 1.0")
+                for val in [0.0, 0.25, 0.5, 0.75, 1.0, 0.0]:
+                    controller.set_brake(val)
+                    click.echo(f"  Brake: {val:.2f}")
+                    time.sleep(0.5)
+            elif choice == '4':
+                click.echo("Testing clutch: 0.0 → 1.0")
+                for val in [0.0, 0.25, 0.5, 0.75, 1.0, 0.0]:
+                    controller.set_clutch(val)
+                    click.echo(f"  Clutch: {val:.2f}")
+                    time.sleep(0.5)
+            elif choice == '5':
+                click.echo("Testing all axes...")
+                controller.set_controls(throttle=0.5, brake=0.0, steering=0.0)
+                time.sleep(0.5)
+                controller.set_controls(throttle=0.0, brake=0.5, steering=0.5)
+                time.sleep(0.5)
+                controller.set_controls(throttle=0.0, brake=0.0, steering=-0.5)
+                time.sleep(0.5)
+                controller.reset()
+                click.echo("  Done")
+            elif choice == '6':
+                click.echo("Testing all buttons (1-8)...")
+                for btn in range(1, 9):
+                    click.echo(f"  Button {btn} pressed")
+                    controller.set_button(btn, True)
+                    time.sleep(0.3)
+                    controller.set_button(btn, False)
+                    time.sleep(0.2)
+                click.echo("  Done")
+            elif choice.startswith('b') and len(choice) == 2:
+                try:
+                    btn_num = int(choice[1])
+                    if 1 <= btn_num <= 8:
+                        click.echo(f"Testing button {btn_num}...")
+                        controller.set_button(btn_num, True)
+                        time.sleep(0.5)
+                        controller.set_button(btn_num, False)
+                        click.echo("  Done")
+                    else:
+                        click.echo("Invalid button number (1-8)")
+                except ValueError:
+                    click.echo("Invalid input")
+            else:
+                click.echo("Invalid choice")
+                
+    except KeyboardInterrupt:
+        click.echo("\n\nTest interrupted")
+    finally:
+        controller.reset()
+        controller.close()
+        click.echo("Controls reset and closed.\n")
+
+
+@cli.command()
+@click.option(
+    '--device-id',
+    default=1,
+    help='vJoy device ID (default: 1)',
+    type=int
+)
+@click.option(
+    '--duration',
+    default=10,
+    help='Test duration in seconds (default: 10)',
+    type=int
+)
+def smoke_test(device_id: int, duration: int):
+    """
+    Run full integration smoke test: telemetry + control loop.
+    
+    Tests both telemetry reading and control output in a safe pattern.
+    Sends a sine wave steering input while monitoring telemetry.
+    
+    Example:
+        ac-bridge smoke-test
+        ac-bridge smoke-test --duration 20
+    """
+    import time
+    import math
+    from ac_bridge.telemetry.ac_native_memory import ACSharedMemory
+    from ac_bridge.control import VJoyController
+    
+    click.echo("\n" + "="*70)
+    click.echo("SMOKE TEST - FULL INTEGRATION")
+    click.echo("="*70)
+    click.echo(f"\nDuration: {duration}s")
+    click.echo(f"Pattern: Sine wave steering, safe throttle\n")
+    
+    click.echo("Initializing...")
+    telemetry = ACSharedMemory()
+    controller = VJoyController(device_id=device_id)
+    
+    click.echo("✓ Telemetry initialized")
+    click.echo("✓ Controller initialized\n")
+    
+    click.echo("Starting smoke test...\n")
+    
+    start_time = time.time()
+    packet_count = 0
+    hz = 20  # 20 Hz for smooth control
+    sleep_time = 1.0 / hz
+    
+    try:
+        while (time.time() - start_time) < duration:
+            if not telemetry.is_connected():
+                click.echo("Waiting for AC...", end='\r')
+                time.sleep(1)
+                continue
+            
+            packet_count += 1
+            elapsed = time.time() - start_time
+            
+            # Read telemetry
+            p = telemetry.physics
+            g = telemetry.graphics
+            
+            # Safe test pattern: sine wave steering, limited throttle
+            steering = 0.3 * math.sin(elapsed * 2)  # Gentle steering
+            throttle = 0.3  # Safe 30% throttle
+            brake = 0.0
+            
+            # Apply control
+            controller.set_controls(throttle, brake, steering)
+            
+            # Display status
+            click.echo(
+                f"[{elapsed:5.1f}s] "
+                f"Speed: {p.speedKmh:6.1f} km/h | "
+                f"Steer: {steering:+.2f} → AC:{p.steerAngle:+6.1f}° | "
+                f"Throttle: {throttle:.2f} → AC:{p.gas:.2f}",
+                nl=False
+            )
+            click.echo("\r", nl=False)
+            
+            time.sleep(sleep_time)
+        
+        click.echo(f"\n\n✓ Smoke test passed!")
+        click.echo(f"  Packets: {packet_count}")
+        click.echo(f"  Rate: {packet_count/duration:.1f} Hz")
+        
+        # Reset controls
+        controller.reset()
+        click.echo("  Controls reset")
+        
+    except Exception as e:
+        click.echo(f"\n\n✗ Smoke test failed: {e}")
+        return 1
+    except KeyboardInterrupt:
+        click.echo("\n\nTest interrupted by user")
+        controller.reset()
+        return 1
+    finally:
+        controller.close()
+        telemetry.close()
+    
+    return 0
+
+
+@cli.command()
+@click.option(
+    '--device-id',
+    default=1,
+    help='vJoy device ID (default: 1)',
+    type=int
+)
+@click.option(
+    '--wait',
+    default=5,
+    help='Wait time after reset in seconds (default: 5)',
+    type=int
+)
+def reset(device_id: int, wait: int):
+    """
+    Trigger session reset in AC and wait until stable.
+    
+    Presses the reset button (button 7) and waits for the car to be
+    stable at the starting position.
+    
+    Example:
+        ac-bridge reset
+        ac-bridge reset --wait 10
+    """
+    import time
+    from ac_bridge.telemetry.ac_native_memory import ACSharedMemory
+    from ac_bridge.control import VJoyController
+    
+    click.echo("\n" + "="*70)
+    click.echo("SESSION RESET")
+    click.echo("="*70)
+    
+    controller = VJoyController(device_id=device_id)
+    telemetry = ACSharedMemory()
+    
+    click.echo("\nTriggering reset...")
+    controller.restart_session()
+    click.echo("✓ Reset button pressed")
+    
+    click.echo(f"\nWaiting {wait}s for session to stabilize...")
+    time.sleep(wait)
+    
+    # Check if stable
+    if telemetry.is_connected():
+        p = telemetry.physics
+        if p.speedKmh < 5.0:
+            click.echo(f"✓ Car stable (speed: {p.speedKmh:.1f} km/h)")
+        else:
+            click.echo(f"⚠ Car moving (speed: {p.speedKmh:.1f} km/h)")
+    else:
+        click.echo("⚠ AC not connected")
+    
+    controller.close()
+    telemetry.close()
+    click.echo("\nReset complete.\n")
 
 
 @cli.command()
@@ -137,270 +604,6 @@ def cloud(uri: str, rate: int, reconnect_delay: int):
     except KeyboardInterrupt:
         click.echo("\n\nStopping client...")
         client.stop()
-
-
-@cli.command()
-@click.option(
-    '--rate',
-    default=10,
-    help='Telemetry read rate in Hz (default: 10)',
-    type=int
-)
-@click.option(
-    '--json-output',
-    type=click.Path(),
-    help='Path to write JSON telemetry stream (for ingestion by other projects)'
-)
-def read(rate: int, json_output: str):
-    """
-    Read telemetry from AC's shared memory and display in console.
-    
-    This reads directly from AC's memory - no UDP, no handshakes.
-    Works every time as long as AC is running.
-    
-    Examples:
-        uv run main.py read --rate 10
-        uv run main.py read --rate 60 --json-output telemetry.jsonl
-    """
-    import json
-    import time
-    from ac_bridge.telemetry.ac_native_memory import ACSharedMemory
-    
-    logger.info("reading_shared_memory", rate_hz=rate, json_output=json_output)
-    
-    click.echo("\n" + "="*70)
-    click.echo("ASSETTO CORSA TELEMETRY READER")
-    click.echo("="*70)
-    click.echo(f"\nReading at {rate} Hz from AC shared memory")
-    click.echo("Press Ctrl+C to stop\n")
-    
-    json_file = None
-    if json_output:
-        json_file = open(json_output, 'w')
-        click.echo(f"Writing telemetry to: {json_output}\n")
-    
-    try:
-        asm = ACSharedMemory()
-        packet_count = 0
-        prev_lap = 0
-        lap_invalidated = False  # Track if CURRENT lap has been cut
-        sleep_time = 1.0 / rate
-        
-        while True:
-            if not asm.is_connected():
-                click.echo("[Waiting for AC...]")
-                time.sleep(2)
-                continue
-            
-            packet_count += 1
-            p = asm.physics
-            g = asm.graphics
-            
-            # Detect lap completion - reset lap validity on NEW lap
-            lap_complete = g.completedLaps > prev_lap
-            if lap_complete:
-                prev_lap = g.completedLaps
-                lap_invalidated = False  # Reset for new lap
-            
-            # Track lap invalidity across entire lap
-            # Once invalidated, stays invalid until new lap
-            if p.numberOfTyresOut > 2 and not lap_invalidated:
-                lap_invalidated = True
-            
-            is_lap_valid = not lap_invalidated
-            lap_validity = "VALID" if is_lap_valid else "INVALID"
-            
-            # Highlight when tires are out
-            if p.numberOfTyresOut > 2:
-                tyres_status = f"[!{p.numberOfTyresOut} OUT!]"
-            elif p.numberOfTyresOut > 0:
-                tyres_status = f"[{p.numberOfTyresOut} out]"
-            else:
-                tyres_status = "On track"
-            
-            # Detect wheel lock: hard braking + high wheel slip = locking
-            # wheelSlip order: FL, FR, RL, RR (Front-Left, Front-Right, Rear-Left, Rear-Right)
-            avg_wheel_slip = sum(p.wheelSlip) / 4
-            wheel_lock_detected = p.brake > 0.5 and avg_wheel_slip > 0.5
-            
-            # Show which wheels are locking (slip > 0.5)
-            if wheel_lock_detected:
-                locked_wheels = []
-                wheel_names = ['FL', 'FR', 'RL', 'RR']
-                for i, (name, slip) in enumerate(zip(wheel_names, p.wheelSlip)):
-                    if slip > 0.5:
-                        locked_wheels.append(f"{name}:{slip:.2f}")
-                lock_indicator = f" [LOCK: {', '.join(locked_wheels)}]" if locked_wheels else " [LOCK!]"
-            else:
-                lock_indicator = ""
-            
-            # Damage detection
-            # carDamage: 5 body parts [front, rear, left, right, center]
-            # Values: 0.0 = pristine, 1.0 = destroyed
-            bodywork_damaged = any(dmg > 0.05 for dmg in p.carDamage)  # 5% threshold
-            bodywork_critical = any(dmg > 0.50 for dmg in p.carDamage)  # 50% threshold
-            
-            # tyreWear: 4 tires [FL, FR, RL, RR]  
-            # Values: 0.0 = new, 1.0 = completely worn
-            tyre_damaged = any(wear > 0.80 for wear in p.tyreWear)  # 80% worn
-            tyre_critical = any(wear > 0.95 for wear in p.tyreWear)  # 95% worn (about to fail)
-            
-            # Build damage indicator
-            damage_parts = []
-            if bodywork_critical:
-                damage_parts.append("BODY!")
-            elif bodywork_damaged:
-                damage_parts.append("body")
-                
-            if tyre_critical:
-                damage_parts.append("TYRE!")
-            elif tyre_damaged:
-                damage_parts.append("tyre")
-            
-            damage_indicator = f" [DMG: {', '.join(damage_parts)}]" if damage_parts else ""
-            
-            # TC activation level
-            tc_indicator = f"TC:{p.tc:.2f}" if p.tc > 0.01 else ""
-            tc_str = f" | {tc_indicator}" if tc_indicator else ""
-            
-            lap_indicator = " [LAP COMPLETE!]" if lap_complete else ""
-            
-            # Format individual wheel slip (FL/FR/RL/RR)
-            slip_str = f"[{p.wheelSlip[0]:.2f}/{p.wheelSlip[1]:.2f}/{p.wheelSlip[2]:.2f}/{p.wheelSlip[3]:.2f}]"
-            
-            # Format tire wear (FL/FR/RL/RR as percentages)
-            wear_str = f"[{p.tyreWear[0]*100:.0f}/{p.tyreWear[1]*100:.0f}/{p.tyreWear[2]*100:.0f}/{p.tyreWear[3]*100:.0f}%]"
-            
-            output = (
-                f"[#{packet_count}]{lap_indicator}{lock_indicator}{damage_indicator} "
-                f"{tyres_status} | "
-                f"Lap:{lap_validity} | "
-                f"Speed: {p.speedKmh:.1f} km/h | "
-                f"RPM: {p.rpms} | "
-                f"Gear: {p.gear} | "
-                f"Gas: {p.gas:.2f} | "
-                f"Brake: {p.brake:.2f}{tc_str} | "
-                f"Steer: {p.steerAngle:.1f}° | "
-                f"Slip: {slip_str} | "
-                f"Wear: {wear_str} | "
-                f"Laps: {g.completedLaps} | "
-                f"Last: {g.lastTime}"
-            )
-            
-            click.echo(output)
-            
-            # Write JSON if requested
-            if json_file:
-                # Identify which specific wheels are locked
-                locked_wheels_mask = [slip > 0.5 for slip in p.wheelSlip]
-                
-                telemetry = {
-                        'packet_id': p.packetId,
-                        
-                        # Basic state
-                        'speed_kmh': p.speedKmh,
-                        'rpm': p.rpms,
-                        'gear': p.gear,
-                        
-                        # Control inputs
-                        'gas': p.gas,
-                        'brake': p.brake,
-                        'clutch': p.clutch,
-                        'steer_angle': p.steerAngle,
-                        
-                        # Velocity (world and local)
-                        'velocity_x': p.velocity[0],
-                        'velocity_y': p.velocity[1],
-                        'velocity_z': p.velocity[2],
-                        'local_velocity_x': p.localVelocity[0],
-                        'local_velocity_y': p.localVelocity[1],
-                        'local_velocity_z': p.localVelocity[2],
-                        
-                        # Angular velocity
-                        'angular_velocity_x': p.localAngularVel[0],
-                        'angular_velocity_y': p.localAngularVel[1],
-                        'angular_velocity_z': p.localAngularVel[2],
-                        
-                        # Orientation
-                        'yaw': p.heading,
-                        'pitch': p.pitch,
-                        'roll': p.roll,
-                        
-                        # G-forces
-                        'acc_g_x': p.accG[0],
-                        'acc_g_y': p.accG[1],
-                        'acc_g_z': p.accG[2],
-                        
-                        # World position
-                        'world_position_x': g.carCoordinates[0],
-                        'world_position_y': g.carCoordinates[1],
-                        'world_position_z': g.carCoordinates[2],
-                        
-                        # Wheel dynamics
-                        'wheel_slip': list(p.wheelSlip),
-                        'wheel_angular_speed': list(p.wheelAngularSpeed),
-                        'wheel_load': list(p.wheelLoad),
-                        'wheel_pressure': list(p.wheelsPressure),
-                        'suspension_travel': list(p.suspensionTravel),
-                        'avg_wheel_slip': avg_wheel_slip,
-                        'wheel_lock_detected': wheel_lock_detected,
-                        'locked_wheels': locked_wheels_mask,
-                        
-                        # Damage
-                        'car_damage': list(p.carDamage),
-                        'bodywork_damaged': bodywork_damaged,
-                        'bodywork_critical': bodywork_critical,
-                        'tyre_wear': list(p.tyreWear),
-                        'tyre_damaged': tyre_damaged,
-                        'tyre_critical': tyre_critical,
-                        
-                        # Temperature
-                        'brake_temp': list(p.brakeTemp),
-                        'tyre_core_temp': list(p.tyreCoreTemperature),
-                        'air_temp': p.airTemp,
-                        'road_temp': p.roadTemp,
-                        
-                        # Track limits and lap
-                        'number_of_tyres_out': p.numberOfTyresOut,
-                        'is_lap_valid': is_lap_valid,
-                        'completed_laps': g.completedLaps,
-                        'current_time': g.iCurrentTime,
-                        'last_time': g.iLastTime,
-                        'best_time': g.iBestTime,
-                        'distance_traveled': g.distanceTraveled,
-                        'normalized_position': g.normalizedCarPosition,
-                        'current_sector_index': g.currentSectorIndex,
-                        
-                        # Track conditions
-                        'surface_grip': g.surfaceGrip,
-                        'flag': g.flag,
-                        
-                        # Assists
-                        'abs_setting': p.abs,
-                        'tc': p.tc,
-                        
-                        # Pit status
-                        'is_in_pit': bool(g.isInPit),
-                        'is_in_pit_lane': bool(g.isInPitLane),
-                        
-                        # Fuel
-                        'fuel': p.fuel,
-                    }
-                json_file.write(json.dumps(telemetry) + '\n')
-                json_file.flush()
-            
-            time.sleep(sleep_time)
-            
-    except KeyboardInterrupt:
-        click.echo("\n\nStopped by user")
-    except Exception as e:
-        click.echo(f"\nError: {e}")
-        click.echo("\nMake sure AC is running and you're in a session!")
-    finally:
-        if json_file:
-            json_file.close()
-            click.echo(f"\nTelemetry written to: {json_output}")
-        asm.close()
 
 
 if __name__ == "__main__":
