@@ -1,13 +1,18 @@
 [project]
 name = "assetto-corsa-gym"
 version = "0.1.0"
-description = "Add your description here"
+description = "Assetto Corsa bridge for telemetry and control with Gymnasium integration"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "click>=8.3.1",
+    "keyboard>=0.13.5",
     "pyaccsharedmemory>=1.0.0",
+    "pyvjoy>=1.0.1",
     "requests>=2.32.5",
     "structlog>=25.5.0",
     "websockets>=15.0.1",
 ]
+
+[project.scripts]
+ac-bridge = "ac_bridge.cli:cli"
