@@ -138,11 +138,11 @@ def test_individual_button(controller, button_num):
 
 
 def test_all_buttons(controller):
-    """Test all 8 buttons in sequence."""
-    print("\nTesting all buttons (1-8) in sequence...")
+    """Test all 12 buttons in sequence."""
+    print("\nTesting all buttons (1-12) in sequence...")
     print("Map these buttons in AC for various functions!\n")
     
-    for btn in range(1, 9):
+    for btn in range(1, 13):
         controller.device.set_button(btn, 1)
         print(f"  Button {btn}: PRESSED", end='\r')
         time.sleep(0.5)
@@ -173,8 +173,8 @@ def main():
             print("  5 - Test All Axes (sequence)")
             print("  6 - Test Combined (circle pattern)")
             print("  7 - Test Gears (buttons 1-2)")
-            print("  8 - Test All Buttons (1-8)")
-            print("  b1-b8 - Test Individual Button (e.g., 'b3' for button 3)")
+            print("  8 - Test All Buttons (1-12)")
+            print("  b1-b12 - Test Individual Button (e.g., 'b9' for button 9)")
             print("  r - Reset all controls")
             print("  s - Show performance stats")
             print("  0 - Exit")
@@ -198,15 +198,21 @@ def main():
                 test_gears(controller)
             elif choice == '8':
                 test_all_buttons(controller)
-            elif choice.startswith('b') and len(choice) == 2 and choice[1].isdigit():
-                button_num = int(choice[1])
-                if 1 <= button_num <= 8:
-                    test_individual_button(controller, button_num)
-                else:
-                    print("\nButton number must be 1-8.\n")
+            elif choice.startswith('b'):
+                try:
+                    button_num = int(choice[1:])
+                    if 1 <= button_num <= 12:
+                        test_individual_button(controller, button_num)
+                    else:
+                        print("\nButton number must be 1-12.\n")
+                except ValueError:
+                    print("\nInvalid button number. Use b1-b12.\n")
             elif choice == 'r':
                 controller.reset()
-                print("\nAll controls reset to neutral.\n")
+                # Also release all buttons (in case any are stuck)
+                for btn in range(1, 13):
+                    controller.device.set_button(btn, 0)
+                print("\nAll controls reset to neutral and all buttons released.\n")
             elif choice == 's':
                 stats = controller.get_stats()
                 print("\nPerformance Statistics:")
