@@ -1,5 +1,52 @@
 # Examples
 
+## Bridge API Testing
+
+### Action Smoothing Test
+
+Test the action smoothing system with various configurations:
+
+```bash
+# Start AC and enter a session, then:
+uv run examples/test_action_smoothing.py
+```
+
+This will demonstrate:
+- Moderate smoothing (default, recommended)
+- Aggressive smoothing (more responsive)
+- No smoothing (hard clamps only, jerky)
+
+See [docs/action_smoothing.md](../docs/action_smoothing.md) for details.
+
+### Bridge API Demo
+
+Test the core `ACBridgeLocal` API:
+
+```bash
+uv run examples/test_bridge_api.py
+```
+
+Demonstrates:
+- Basic operations (connect, close)
+- Telemetry reading (latest_obs)
+- Control application (apply_action)
+- Session reset (reset)
+- Full Gym-style environment example
+
+### Control Testing
+
+Interactive control testing tool:
+
+```bash
+uv run examples/test_control.py
+```
+
+Use this to:
+- Test individual vJoy axes (steering, throttle, brake, clutch)
+- Map vJoy buttons in AC
+- Verify control latency
+- Debug stuck buttons (press 'r' to reset all controls)
+
 ## WebSocket Telemetry Streaming
 
 ### Local Development Mode

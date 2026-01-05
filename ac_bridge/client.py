@@ -26,6 +26,7 @@ from ac_bridge.timing import Ticker
 from ac_bridge.protocol import TelemetryFrame, ControlCommand
 from ac_bridge.telemetry.ac_native_memory import ACSharedMemory
 from ac_bridge.control.vjoy_controller import VJoyController
+from ac_bridge.action_smoother import ActionSmoother, SmoothingConfig, get_moderate_config
 
 logger = structlog.get_logger()
 
@@ -57,7 +58,8 @@ class ACBridgeLocal:
         control_hz: int = 10,
         controller: str = "vjoy",
         device_id: int = 1,
-        obs_dim: int = 15
+        obs_dim: int = 15,
+        smoothing_config: SmoothingConfig = None
     ):
         """
         Initialize bridge.
@@ -68,6 +70,8 @@ class ACBridgeLocal:
             controller: Controller type, currently only "vjoy"
             device_id: vJoy device ID
             obs_dim: Observation vector dimension (default: 15)
+            smoothing_config: Action smoothing configuration (default: moderate)
+                             Set to None to disable smoothing
         """
         self.telemetry_hz = telemetry_hz
         self.control_hz = control_hz
@@ -76,6 +80,11 @@ class ACBridgeLocal:
         # Initialize hardware interfaces
         self.telemetry_reader = ACSharedMemory()
         self.controller = VJoyController(device_id=device_id) if controller == "vjoy" else None
+        
+        # Action smoothing (use moderate config by default)
+        if smoothing_config is None:
+            smoothing_config = get_moderate_config()
+        self.action_smoother = ActionSmoother(config=smoothing_config) if smoothing_config else None
         
         # Timing
         self.telemetry_ticker = Ticker(hz=telemetry_hz)
@@ -185,17 +194,32 @@ class ACBridgeLocal:
         clutch: float = 0.0
     ) -> None:
         """
-        Apply control action via vJoy.
+        Apply control action via vJoy with optional smoothing.
+        
+        If smoothing is enabled (default), applies:
+        1. Rate limiting (max delta per step)
+        2. EMA filtering (removes twitchy outputs)
+        3. Asymmetric pedal dynamics (realistic application/release)
+        4. Hard clamps (safety)
+        
+        This dramatically stabilizes RL training at 10 Hz.
         
         Args:
-            steer: Steering input, -1.0 (left) to 1.0 (right)
-            throttle: Throttle input, 0.0 to 1.0
-            brake: Brake input, 0.0 to 1.0
-            clutch: Clutch input, 0.0 to 1.0 (optional)
+            steer: Target steering, -1.0 (left) to 1.0 (right)
+            throttle: Target throttle, 0.0 to 1.0
+            brake: Target brake, 0.0 to 1.0
+            clutch: Target clutch, 0.0 to 1.0 (optional)
         """
         if not self.controller:
             raise RuntimeError("No controller available")
         
+        # Apply smoothing if enabled
+        if self.action_smoother:
+            steer, throttle, brake, clutch = self.action_smoother.smooth(
+                steer, throttle, brake, clutch
+            )
+        
+        # Send smoothed action to vJoy
         self.controller.set_controls(
             throttle=throttle,
             brake=brake,
@@ -239,10 +263,26 @@ class ACBridgeLocal:
         time.sleep(0.1)  # Small delay for controls to settle
         self.controller.set_gear(2)
         
+        # Reset smoother state for new episode
+        if self.action_smoother:
+            self.action_smoother.reset()
+        
         # Reset ticker for new episode
         self.telemetry_ticker.reset()
         
         logger.info("reset_complete", gear="1st")
+    
+    def get_smoother_stats(self) -> dict:
+        """
+        Get action smoother statistics.
+        
+        Returns:
+            Dict with smoothing stats (step count, avg deltas, config)
+            Empty dict if smoothing is disabled.
+        """
+        if not self.action_smoother:
+            return {}
+        return self.action_smoother.get_stats()
     
     def _poll_telemetry_loop(self):
         """

@@ -32,8 +32,16 @@ from ac_bridge.protocol import (
     Codec,
 )
 from ac_bridge.timing import Ticker, MonotonicClock
+from ac_bridge.action_smoother import (
+    ActionSmoother,
+    SmoothingConfig,
+    get_conservative_config,
+    get_moderate_config,
+    get_aggressive_config,
+    get_no_smoothing_config,
+)
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     # Main bridge interfaces
@@ -53,5 +61,13 @@ __all__ = [
     # Timing
     "Ticker",
     "MonotonicClock",
+    
+    # Action smoothing
+    "ActionSmoother",
+    "SmoothingConfig",
+    "get_conservative_config",
+    "get_moderate_config",
+    "get_aggressive_config",
+    "get_no_smoothing_config",
 ]
 

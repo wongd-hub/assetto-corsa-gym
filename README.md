@@ -1,5 +1,8 @@
 # Assetto Corsa Gym Bridge
 
+> [!CAUTION]
+> This repo was written primarily using gen-AI (Claude Sonnet 4.5) and serves to enable [apex-seeker](https://github.com/wongd-hub/apex-seeker).
+
 Clean plumbing layer for building Gymnasium RL environments with Assetto Corsa.
 
 **This repo:** Windows integration (telemetry + control + timing)  
@@ -9,6 +12,7 @@ Clean plumbing layer for building Gymnasium RL environments with Assetto Corsa.
 
 - **ACBridgeLocal** - Main API with background telemetry (60 Hz) + vJoy control
 - **RealTimeStepper** - Drift-correcting step timing for consistent RL training
+- **Action Smoothing** - Rate limiting + EMA filtering for stable RL training at 10 Hz
 - **Comprehensive telemetry** - 40+ fields including damage, lap timing, track limits
 - **Low latency** - 3-8ms control, sub-ms telemetry reads (cached)
 - **Actor-learner ready** - WebSocket streaming for cloud training
@@ -47,11 +51,35 @@ uv run ac-bridge smoke-test
 uv run ac-bridge test-control
 ```
 
+**Action Smoothing (enabled by default):**
+
+```python
+from ac_bridge import ACBridgeLocal, get_aggressive_config, get_no_smoothing_config
+
+# Moderate smoothing (default - recommended for training)
+bridge = ACBridgeLocal(control_hz=10)
+
+# More responsive (for advanced policies)
+bridge = ACBridgeLocal(control_hz=10, smoothing_config=get_aggressive_config())
+
+# Disable smoothing (hard clamps only)
+bridge = ACBridgeLocal(control_hz=10, smoothing_config=get_no_smoothing_config())
+```
+
+Smoothing includes:
+- **Rate limiting** - Limits how fast inputs can change (prevents jerky steering)
+- **EMA filtering** - Removes noisy outputs without lag
+- **Asymmetric pedals** - Realistic brake/throttle dynamics (fast brake, slow release)
+- **Hard clamps** - Always enforces [-1, 1] steering, [0, 1] pedals
+
+This dramatically stabilizes RL training at 10 Hz by preventing spin-outs from sudden control changes.
+
 **See [docs/api_reference.md](docs/api_reference.md) for complete API.**
 
 ## Documentation
 
 - **[API Reference](docs/api_reference.md)** - Complete API documentation (start here!)
+- [Action Smoothing](docs/action_smoothing.md) - Rate limiting + EMA filtering for stable training
 - [Telemetry System](docs/telemetry.md) - Shared memory implementation details
 - [Control System](docs/control.md) - vJoy setup and latency optimization
 - [Cloud Setup](docs/cloud_setup.md) - Actor-learner pattern for remote training
@@ -61,7 +89,8 @@ uv run ac-bridge test-control
 
 **Observation:** 15-dim normalized vector + 40+ field info dict  
 **Timing:** Drift-correcting 10 Hz steps, <1ms accuracy  
-**Control:** vJoy with 3-8ms latency  
+**Control:** vJoy with 3-8ms latency + action smoothing  
+**Smoothing:** Rate limiting + EMA filtering (prevents jerky inputs)  
 **Reset:** Automated session restart + 1st gear  
 **Cloud:** WebSocket streaming for distributed training
 
