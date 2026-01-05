@@ -207,8 +207,8 @@ class ACBridgeLocal:
         """
         Trigger session restart and wait until ready.
         
-        Presses button 7 (mapped to session restart), waits for session to
-        restart, then resets controls and shifts to 1st gear.
+        Presses button 7 (restart race), then button 9 (start race) 2s later,
+        waits for session to start, then resets controls and shifts to 1st gear.
         
         Args:
             wait_time: Time to wait after reset (default: 5s)
@@ -218,16 +218,24 @@ class ACBridgeLocal:
         if not self.controller:
             raise RuntimeError("No controller available")
         
-        # Trigger restart (button 7)
+        # Step 1: Trigger restart (button 7)
         self.controller.restart_session()
+        logger.info("reset_button_7_pressed", action="restart_race")
         
-        # Wait for session to restart
-        time.sleep(wait_time)
+        # Step 2: Wait 2s, then press button 9 (start race)
+        time.sleep(2.0)
+        self.controller.press_button(9, duration=0.1)
+        logger.info("reset_button_9_pressed", action="start_race")
         
-        # Reset all controls to neutral
+        # Step 3: Wait remaining time for session to fully start
+        remaining_wait = wait_time - 2.0
+        if remaining_wait > 0:
+            time.sleep(remaining_wait)
+        
+        # Step 4: Reset all controls to neutral
         self.controller.reset()
         
-        # Shift to 1st gear (gear=2 in cache: 0=R, 1=N, 2=1st)
+        # Step 5: Shift to 1st gear (gear=2 in cache: 0=R, 1=N, 2=1st)
         time.sleep(0.1)  # Small delay for controls to settle
         self.controller.set_gear(2)
         
