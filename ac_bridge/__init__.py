@@ -22,6 +22,7 @@ Usage:
 """
 
 from ac_bridge.client import ACBridgeLocal, ACBridgeWSClient, ACBridge
+from ac_bridge.stepper import RealTimeStepper
 from ac_bridge.protocol import (
     TelemetryFrame,
     ControlCommand,
@@ -39,6 +40,7 @@ __all__ = [
     "ACBridgeLocal",
     "ACBridgeWSClient",
     "ACBridge",  # Alias for ACBridgeLocal
+    "RealTimeStepper",  # Stepper for consistent RL stepping
     
     # Protocol types
     "TelemetryFrame",
