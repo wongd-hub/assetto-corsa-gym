@@ -207,8 +207,8 @@ class ACBridgeLocal:
         """
         Trigger session restart and wait until ready.
         
-        Presses button 7 (mapped to session restart) and waits for
-        car to be stable at starting position.
+        Presses button 7 (mapped to session restart), waits for session to
+        restart, then resets controls and shifts to 1st gear.
         
         Args:
             wait_time: Time to wait after reset (default: 5s)
@@ -218,16 +218,23 @@ class ACBridgeLocal:
         if not self.controller:
             raise RuntimeError("No controller available")
         
-        # Trigger restart
+        # Trigger restart (button 7)
         self.controller.restart_session()
         
         # Wait for session to restart
         time.sleep(wait_time)
         
+        # Reset all controls to neutral
+        self.controller.reset()
+        
+        # Shift to 1st gear (gear=2 in cache: 0=R, 1=N, 2=1st)
+        time.sleep(0.1)  # Small delay for controls to settle
+        self.controller.set_gear(2)
+        
         # Reset ticker for new episode
         self.telemetry_ticker.reset()
         
-        logger.info("reset_complete")
+        logger.info("reset_complete", gear="1st")
     
     def _poll_telemetry_loop(self):
         """
