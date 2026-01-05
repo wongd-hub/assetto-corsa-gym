@@ -120,7 +120,9 @@ def main():
     print("ACTION SMOOTHING TEST")
     print("=" * 70)
     print("\nMake sure AC is running and you're in a session!")
-    print("This test will apply various control patterns.\n")
+    print("This test will apply various control patterns at 10 Hz.\n")
+    print("Note: Some vJoy warnings may appear during stress tests.")
+    print("This is normal and won't occur during regular RL training.\n")
     
     input("Press Enter to start...")
     
@@ -147,30 +149,9 @@ def main():
     print("\n[OK] Moderate smoothing complete")
     time.sleep(1)
     
-    # Test 2: Aggressive smoothing
+    # Test 2: No smoothing (hard clamps only)
     print("\n" + "=" * 70)
-    print("TEST 2: AGGRESSIVE SMOOTHING (more responsive)")
-    print("=" * 70)
-    
-    bridge = ACBridgeLocal(
-        telemetry_hz=60,
-        control_hz=10,
-        smoothing_config=get_aggressive_config()
-    )
-    bridge.connect()
-    
-    time.sleep(1)
-    
-    test_step_inputs(bridge, duration_secs=3.0)
-    
-    bridge.close()
-    
-    print("\n[OK] Aggressive smoothing complete")
-    time.sleep(1)
-    
-    # Test 3: No smoothing (hard clamps only)
-    print("\n" + "=" * 70)
-    print("TEST 3: NO SMOOTHING (hard clamps only)")
+    print("TEST 2: NO SMOOTHING (hard clamps only)")
     print("=" * 70)
     print("WARNING: This will be jerky!")
     
@@ -194,10 +175,10 @@ def main():
     print("ALL TESTS COMPLETE")
     print("=" * 70)
     print("\nKey Observations:")
-    print("- Moderate: Smooth, stable, good default")
-    print("- Aggressive: More responsive, still smooth")
-    print("- No smoothing: Jerky, unstable for RL training")
-    print("\nRecommendation: Use moderate config for initial training")
+    print("- Moderate: Smooth, stable, good default for RL training")
+    print("- No smoothing: Jerky, immediate response (debugging only)")
+    print("\nRecommendation: Use moderate config (default) for training")
+    print("Aggressive config available if you need more responsiveness")
     print("=" * 70 + "\n")
 
 
