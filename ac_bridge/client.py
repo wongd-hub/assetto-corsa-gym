@@ -305,9 +305,9 @@ class ACBridgeLocal:
         obs = np.array([
             # Velocity (normalized)
             p.speedKmh / 300.0,                    # 0: speed (0-300 km/h → 0-1)
-            p.velocityX / 100.0,                   # 1: velocity x
-            p.velocityY / 100.0,                   # 2: velocity y  
-            p.velocityZ / 100.0,                   # 3: velocity z
+            p.velocity[0] / 100.0,                 # 1: velocity x
+            p.velocity[1] / 100.0,                 # 2: velocity y  
+            p.velocity[2] / 100.0,                 # 3: velocity z
             
             # Control inputs (already 0-1)
             p.gas,                                  # 4: throttle
@@ -357,10 +357,10 @@ class ACBridgeLocal:
             'steer_angle': float(p.steerAngle),
             
             # Position & velocity
-            'position': [float(p.x), float(p.y), float(p.z)],
-            'velocity': [float(p.velocityX), float(p.velocityY), float(p.velocityZ)],
-            'local_velocity': [float(p.localVelocityX), float(p.localVelocityY), float(p.localVelocityZ)],
-            'angular_velocity': [float(p.localAngularVelocityX), float(p.localAngularVelocityY), float(p.localAngularVelocityZ)],
+            'position': [float(g.carCoordinates[0]), float(g.carCoordinates[1]), float(g.carCoordinates[2])],
+            'velocity': [float(p.velocity[0]), float(p.velocity[1]), float(p.velocity[2])],
+            'local_velocity': [float(p.localVelocity[0]), float(p.localVelocity[1]), float(p.localVelocity[2])],
+            'angular_velocity': [float(p.localAngularVel[0]), float(p.localAngularVel[1]), float(p.localAngularVel[2])],
             
             # G-forces
             'acc_g': [float(p.accG[0]), float(p.accG[1]), float(p.accG[2])],
@@ -391,10 +391,10 @@ class ACBridgeLocal:
             'tyre_damaged': bool(np.any(np.array(p.tyreWear) > 0.80)),
             
             # Environment
-            'surface_grip': float(p.surfaceGrip),
+            'surface_grip': float(g.surfaceGrip),
             'air_temp': float(p.airTemp),
             'road_temp': float(p.roadTemp),
-            'is_in_pit_lane': bool(p.isInPitLane),
+            'is_in_pit_lane': bool(g.isInPitLane),
             
             # Session
             'session_type': int(g.session),
