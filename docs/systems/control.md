@@ -44,7 +44,7 @@ Open "Configure vJoy" application:
   - Y Axis: ✓ (Throttle)
   - Z Axis: ✓ (Brake)
   - RZ Rotation: ✓ (Clutch)
-- Buttons: 8 or more
+- Buttons: 12 or more (recommended)
 - POV Hat Switch: 0 (disabled)
 
 Click "Apply" to save configuration.
@@ -62,17 +62,48 @@ uv sync
 In AC, go to Options → Controls:
 
 1. Select "vJoy Device" as controller
-2. Map controls:
+2. Map axes:
+   - Steering: X Axis
    - Throttle: Y Axis
    - Brake: Z Axis
    - Clutch: RZ Axis
-   - Steer Left/Right: X Axis
 3. Set all axis ranges:
    - Minimum: -100%
    - Maximum: +100%
    - Deadzone: 0%
    - Gamma: 1.0
-4. Optional: Map gear up/down to buttons 1 and 2
+
+### 5. Button Mappings
+
+Map vJoy buttons in AC for full functionality:
+
+| vJoy Button | Recommended Mapping | Required for AC Bridge |
+|-------------|---------------------|------------------------|
+| Button 1 | Next gear | No (optional) |
+| Button 2 | Previous gear | No (optional) |
+| Button 3 | Brake balance → front | No (optional) |
+| Button 4 | Brake balance → rear | No (optional) |
+| Button 5 | Traction control + | No (optional) |
+| Button 6 | Traction control - | No (optional) |
+| **Button 7** | **Restart race** | **Yes** ⚠️ |
+| Button 8 | Restart session | No |
+| **Button 9** | **Start race** | **Yes** ⚠️ |
+| Button 10-12 | (Unassigned) | No |
+
+!!! warning "Required for Reset"
+    **Buttons 7 and 9 are required** for `ACBridgeLocal.reset()` to work properly:
+    
+    - Button 7 triggers the race restart
+    - Button 9 starts the race after restart
+    
+    The reset sequence: Press button 7 → Wait 2s → Press button 9 → Reset controls → Shift to 1st gear
+
+!!! tip "Interactive Button Testing"
+    Use the interactive test tool to verify button mappings:
+    ```bash
+    uv run examples/test_control.py
+    # Press 'b1' through 'b12' to test each button
+    ```
 
 ## Usage
 

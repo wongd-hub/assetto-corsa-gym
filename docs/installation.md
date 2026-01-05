@@ -123,13 +123,28 @@ Map vJoy in Assetto Corsa:
 1. Launch AC → Options → Controls
 2. **Change device to "vJoy Device"**
 3. Map axes:
-   - Steering → vJoy X axis
-   - Throttle → vJoy Y axis
-   - Brake → vJoy Z axis
-   - Clutch → vJoy RZ axis (optional)
-4. Map buttons (optional):
-   - Button 7 → Restart session
-   - Button 9 → Start race
+   - Steering → vJoy X axis (Axle 1)
+   - Throttle → vJoy Y axis (Axle 2)
+   - Brake → vJoy Z axis (Axle 3)
+   - Clutch → vJoy RZ axis (Axle 6, optional)
+
+4. Map buttons (recommended):
+
+| vJoy Button | Function | Required for AC Bridge |
+|-------------|----------|------------------------|
+| Button 1 | Next gear | No |
+| Button 2 | Previous gear | No |
+| Button 3 | Brake balance → front | No |
+| Button 4 | Brake balance → rear | No |
+| Button 5 | Traction control + | No |
+| Button 6 | Traction control - | No |
+| **Button 7** | **Restart race** | **Yes** (for reset) |
+| Button 8 | Restart session | No |
+| **Button 9** | **Start race** | **Yes** (for reset) |
+
+!!! warning "Required Buttons"
+    Buttons 7 and 9 must be mapped for `bridge.reset()` to work. The reset sequence presses button 7 (restart race), waits 2s, then presses button 9 (start race).
+
 5. **Save and test** - drive around to verify controls work
 
 ## Troubleshooting

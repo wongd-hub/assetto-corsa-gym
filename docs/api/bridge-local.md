@@ -181,9 +181,16 @@ bridge.reset(wait_time=3.0)  # Faster reset
 # AC will restart race and be ready after 3 seconds
 ```
 
-**Note:** Button 7 and 9 must be mapped in AC to:
-- Button 7 → Restart session
-- Button 9 → Start race
+**Button Requirements:**
+
+Buttons 7 and 9 must be mapped in AC's controls:
+
+| Button | Mapping | Purpose |
+|--------|---------|---------|
+| Button 7 | Restart race | Triggers session restart |
+| Button 9 | Start race | Starts race after restart |
+
+See [Control System - Button Mappings](../systems/control.md#5-button-mappings) for complete setup guide.
 
 ### `get_smoother_stats() -> dict`
 
