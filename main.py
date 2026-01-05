@@ -79,8 +79,7 @@ def run(hz: int, telemetry_port: int, controller: str, bind: str, log_dir: str):
         ac-bridge run --hz 60 --controller vjoy
     """
     import time
-    from ac_bridge.telemetry.ac_native_memory import ACSharedMemory
-    from ac_bridge.control import VJoyController
+    from ac_bridge import ACBridgeLocal
     
     click.echo("\n" + "="*70)
     click.echo("AC BRIDGE - MAIN LOOP")
@@ -92,54 +91,51 @@ def run(hz: int, telemetry_port: int, controller: str, bind: str, log_dir: str):
         click.echo(f"Logging to: {log_dir}")
     click.echo("\nPress Ctrl+C to stop\n")
     
-    # Initialize telemetry and control
-    telemetry = ACSharedMemory()
-    ctrl = VJoyController() if controller == 'vjoy' else None
+    # Initialize bridge using new API
+    bridge = ACBridgeLocal(telemetry_hz=60, control_hz=hz, controller=controller)
+    bridge.connect()
     
-    if not ctrl:
-        click.echo("Error: vJoy controller not available")
+    if not bridge.is_connected():
+        click.echo("Error: Could not connect to AC. Is it running?")
+        bridge.close()
         return
     
-    sleep_time = 1.0 / hz
+    click.echo("Bridge running... Ready for control commands.\n")
+    
     packet_count = 0
     
     try:
-        click.echo("Bridge running... Ready for control commands.\n")
-        
         while True:
-            if not telemetry.is_connected():
+            # Get latest observation
+            try:
+                obs, info = bridge.latest_obs()
+                packet_count += 1
+                
+                # Display status every second
+                if packet_count % hz == 0:
+                    click.echo(
+                        f"[{info['seq']:06d}] "
+                        f"Speed: {info['speed_kmh']:6.1f} km/h | "
+                        f"Lap: {info['completed_laps']} | "
+                        f"Gear: {info['gear']} | "
+                        f"Tyres out: {info['tyres_out']}",
+                        nl=False
+                    )
+                    click.echo("\r", nl=False)
+                
+                # Control commands would be received here (e.g., via RPC)
+                # For now, this is a monitoring loop
+                
+                time.sleep(1.0 / hz)
+            
+            except RuntimeError:
                 click.echo("Waiting for AC...", end='\r')
                 time.sleep(1)
-                continue
-            
-            packet_count += 1
-            
-            # Read telemetry
-            p = telemetry.physics
-            g = telemetry.graphics
-            
-            # Display status every second
-            if packet_count % hz == 0:
-                click.echo(
-                    f"[{packet_count:06d}] "
-                    f"Speed: {p.speedKmh:6.1f} km/h | "
-                    f"Lap: {g.completedLaps} | "
-                    f"Time: {g.iCurrentTime/1000:.1f}s",
-                    nl=False
-                )
-                click.echo("  ", nl=False)  # Carriage return without newline
-                click.echo("\r", nl=False)
-            
-            # Control commands would be received here (e.g., via RPC)
-            # For now, this is a monitoring loop
-            
-            time.sleep(sleep_time)
             
     except KeyboardInterrupt:
         click.echo("\n\nStopping bridge...")
     finally:
-        ctrl.close()
-        telemetry.close()
+        bridge.close()
         click.echo("Bridge stopped.")
 
 
@@ -168,7 +164,7 @@ def test_telemetry(hz: int, duration: int):
         ac-bridge test-telemetry --hz 10 --duration 30
     """
     import time
-    from ac_bridge.telemetry.ac_native_memory import ACSharedMemory
+    from ac_bridge import ACBridgeLocal
     
     click.echo("\n" + "="*70)
     click.echo("TELEMETRY TEST")
@@ -178,8 +174,15 @@ def test_telemetry(hz: int, duration: int):
         click.echo(f"Duration: {duration}s")
     click.echo("Press Ctrl+C to stop\n")
     
-    asm = ACSharedMemory()
-    sleep_time = 1.0 / hz
+    # Use ACBridgeLocal (without controller for read-only test)
+    bridge = ACBridgeLocal(telemetry_hz=hz, control_hz=10)
+    bridge.connect()
+    
+    if not bridge.is_connected():
+        click.echo("Error: Could not connect to AC. Is it running?")
+        bridge.close()
+        return
+    
     packet_count = 0
     start_time = time.time()
     
@@ -188,31 +191,31 @@ def test_telemetry(hz: int, duration: int):
             if duration and (time.time() - start_time) > duration:
                 break
             
-            if not asm.is_connected():
+            try:
+                obs, info = bridge.latest_obs()
+                packet_count += 1
+                
+                # Display comprehensive telemetry
+                click.echo(
+                    f"[{info['seq']:05d}] "
+                    f"Speed: {info['speed_kmh']:6.1f} km/h | "
+                    f"RPM: {info['rpm']:5d} | "
+                    f"Gear: {info['gear']} | "
+                    f"Throttle: {info['throttle']:.2f} | "
+                    f"Brake: {info['brake']:.2f} | "
+                    f"Steer: {info['steer_angle']:+6.1f}° | "
+                    f"Lap: {info['completed_laps']} | "
+                    f"TyresOut: {info['tyres_out']} | "
+                    f"dt: {info['dt_actual']*1000:.1f}ms",
+                    nl=False
+                )
+                click.echo("\r", nl=False)
+                
+                time.sleep(1.0 / hz)
+            
+            except RuntimeError:
                 click.echo("Waiting for AC...", end='\r')
                 time.sleep(1)
-                continue
-            
-            packet_count += 1
-            p = asm.physics
-            g = asm.graphics
-            
-            # Display comprehensive telemetry
-            click.echo(
-                f"[{packet_count:05d}] "
-                f"Speed: {p.speedKmh:6.1f} km/h | "
-                f"RPM: {p.rpms:5d} | "
-                f"Gear: {p.gear} | "
-                f"Throttle: {p.gas:.2f} | "
-                f"Brake: {p.brake:.2f} | "
-                f"Steering: {p.steerAngle:+6.1f}° | "
-                f"Lap: {g.completedLaps} | "
-                f"TyresOut: {p.numberOfTyresOut}",
-                nl=False
-            )
-            click.echo("\r", nl=False)
-            
-            time.sleep(sleep_time)
         
         if duration:
             click.echo(f"\n\nTest complete: {packet_count} packets in {duration}s")
@@ -223,7 +226,7 @@ def test_telemetry(hz: int, duration: int):
         click.echo(f"\n\nStopped: {packet_count} packets in {elapsed:.1f}s")
         click.echo(f"Average rate: {packet_count/elapsed:.1f} Hz")
     finally:
-        asm.close()
+        bridge.close()
 
 
 @cli.command()
@@ -363,8 +366,7 @@ def smoke_test(device_id: int, duration: int):
     """
     import time
     import math
-    from ac_bridge.telemetry.ac_native_memory import ACSharedMemory
-    from ac_bridge.control import VJoyController
+    from ac_bridge import ACBridgeLocal
     
     click.echo("\n" + "="*70)
     click.echo("SMOKE TEST - FULL INTEGRATION")
@@ -373,71 +375,65 @@ def smoke_test(device_id: int, duration: int):
     click.echo(f"Pattern: Sine wave steering, safe throttle\n")
     
     click.echo("Initializing...")
-    telemetry = ACSharedMemory()
-    controller = VJoyController(device_id=device_id)
+    bridge = ACBridgeLocal(telemetry_hz=60, control_hz=20, device_id=device_id)
+    bridge.connect()
     
-    click.echo("✓ Telemetry initialized")
-    click.echo("✓ Controller initialized\n")
+    if not bridge.is_connected():
+        click.echo("[ERROR] Could not connect to AC. Is it running?")
+        bridge.close()
+        return 1
     
+    click.echo("[OK] Bridge initialized\n")
     click.echo("Starting smoke test...\n")
     
     start_time = time.time()
     packet_count = 0
     hz = 20  # 20 Hz for smooth control
-    sleep_time = 1.0 / hz
     
     try:
         while (time.time() - start_time) < duration:
-            if not telemetry.is_connected():
+            try:
+                obs, info = bridge.latest_obs()
+                packet_count += 1
+                elapsed = time.time() - start_time
+                
+                # Safe test pattern: sine wave steering, limited throttle
+                steering = 0.3 * math.sin(elapsed * 2)  # Gentle steering
+                throttle = 0.3  # Safe 30% throttle
+                brake = 0.0
+                
+                # Apply control via bridge
+                bridge.apply_action(steering, throttle, brake)
+                
+                # Display status
+                click.echo(
+                    f"[{elapsed:5.1f}s] "
+                    f"Speed: {info['speed_kmh']:6.1f} km/h | "
+                    f"Steer: {steering:+.2f} → AC:{info['steer_angle']:+6.1f}° | "
+                    f"Throttle: {throttle:.2f} → AC:{info['throttle']:.2f}",
+                    nl=False
+                )
+                click.echo("\r", nl=False)
+                
+                time.sleep(1.0 / hz)
+            
+            except RuntimeError:
                 click.echo("Waiting for AC...", end='\r')
                 time.sleep(1)
-                continue
-            
-            packet_count += 1
-            elapsed = time.time() - start_time
-            
-            # Read telemetry
-            p = telemetry.physics
-            g = telemetry.graphics
-            
-            # Safe test pattern: sine wave steering, limited throttle
-            steering = 0.3 * math.sin(elapsed * 2)  # Gentle steering
-            throttle = 0.3  # Safe 30% throttle
-            brake = 0.0
-            
-            # Apply control
-            controller.set_controls(throttle, brake, steering)
-            
-            # Display status
-            click.echo(
-                f"[{elapsed:5.1f}s] "
-                f"Speed: {p.speedKmh:6.1f} km/h | "
-                f"Steer: {steering:+.2f} → AC:{p.steerAngle:+6.1f}° | "
-                f"Throttle: {throttle:.2f} → AC:{p.gas:.2f}",
-                nl=False
-            )
-            click.echo("\r", nl=False)
-            
-            time.sleep(sleep_time)
         
-        click.echo(f"\n\n✓ Smoke test passed!")
+        click.echo(f"\n\n[OK] Smoke test passed!")
         click.echo(f"  Packets: {packet_count}")
         click.echo(f"  Rate: {packet_count/duration:.1f} Hz")
-        
-        # Reset controls
-        controller.reset()
         click.echo("  Controls reset")
         
     except Exception as e:
-        click.echo(f"\n\n✗ Smoke test failed: {e}")
+        click.echo(f"\n\n[ERROR] Smoke test failed: {e}")
         return 1
     except KeyboardInterrupt:
         click.echo("\n\nTest interrupted by user")
-        controller.reset()
         return 1
     finally:
-        controller.close()
-        telemetry.close()
+        bridge.close()
     
     return 0
 
