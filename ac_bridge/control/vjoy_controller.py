@@ -8,6 +8,7 @@ and batch updates for optimal performance.
 import time
 import structlog
 import pyvjoy
+from pyvjoy.exceptions import vJoyException
 
 logger = structlog.get_logger()
 
@@ -90,6 +91,46 @@ class VJoyController:
         
         logger.info("vjoy_reset", device_id=self.device_id)
     
+    def _safe_set_axis(self, axis_id: int, value: int, axis_name: str = "unknown") -> bool:
+        """
+        Safely set axis value with error handling and retry.
+        
+        Args:
+            axis_id: vJoy axis ID (e.g., HID_USAGE_X)
+            value: Axis value (0-32767)
+            axis_name: Human-readable axis name for logging
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            self.device.set_axis(axis_id, value)
+            return True
+        except vJoyException as e:
+            logger.warning(
+                "vjoy_axis_error",
+                axis=axis_name,
+                device_id=self.device_id,
+                error=str(e),
+                attempt="first"
+            )
+            
+            # Try to reset device and retry once
+            try:
+                time.sleep(0.01)  # Brief pause
+                self.device.set_axis(axis_id, value)
+                logger.info("vjoy_axis_recovered", axis=axis_name)
+                return True
+            except vJoyException as retry_err:
+                logger.error(
+                    "vjoy_axis_failed",
+                    axis=axis_name,
+                    device_id=self.device_id,
+                    error=str(retry_err),
+                    msg="vJoy device may be in error state. Try restarting vJoy or AC."
+                )
+                return False
+    
     def _float_to_axis(self, value: float, center_zero: bool = False) -> int:
         """
         Convert float value to vJoy axis value.
@@ -121,9 +162,9 @@ class VJoyController:
             return
         
         axis_value = self._float_to_axis(value)
-        self.device.set_axis(pyvjoy.HID_USAGE_Y, axis_value)
-        self._cache['throttle'] = value
-        self._update_count += 1
+        if self._safe_set_axis(pyvjoy.HID_USAGE_Y, axis_value, "throttle"):
+            self._cache['throttle'] = value
+            self._update_count += 1
     
     def set_brake(self, value: float):
         """
@@ -136,9 +177,9 @@ class VJoyController:
             return
         
         axis_value = self._float_to_axis(value)
-        self.device.set_axis(pyvjoy.HID_USAGE_Z, axis_value)
-        self._cache['brake'] = value
-        self._update_count += 1
+        if self._safe_set_axis(pyvjoy.HID_USAGE_Z, axis_value, "brake"):
+            self._cache['brake'] = value
+            self._update_count += 1
     
     def set_clutch(self, value: float):
         """
@@ -151,9 +192,9 @@ class VJoyController:
             return
         
         axis_value = self._float_to_axis(value)
-        self.device.set_axis(pyvjoy.HID_USAGE_RZ, axis_value)
-        self._cache['clutch'] = value
-        self._update_count += 1
+        if self._safe_set_axis(pyvjoy.HID_USAGE_RZ, axis_value, "clutch"):
+            self._cache['clutch'] = value
+            self._update_count += 1
     
     def set_steering(self, value: float):
         """
@@ -166,9 +207,9 @@ class VJoyController:
             return
         
         axis_value = self._float_to_axis(value, center_zero=True)
-        self.device.set_axis(pyvjoy.HID_USAGE_X, axis_value)
-        self._cache['steering'] = value
-        self._update_count += 1
+        if self._safe_set_axis(pyvjoy.HID_USAGE_X, axis_value, "steering"):
+            self._cache['steering'] = value
+            self._update_count += 1
     
     def set_gear(self, gear: int):
         """
@@ -241,6 +282,7 @@ class VJoyController:
         Batch update all controls for minimum latency.
         
         This is the most efficient way to update multiple axes at once.
+        Includes error handling for vJoy exceptions with auto-retry.
         
         Args:
             throttle: 0.0 to 1.0
@@ -250,24 +292,24 @@ class VJoyController:
         """
         # Only update changed values
         if self._cache['throttle'] != throttle:
-            self.device.set_axis(pyvjoy.HID_USAGE_Y, self._float_to_axis(throttle))
-            self._cache['throttle'] = throttle
-            self._update_count += 1
+            if self._safe_set_axis(pyvjoy.HID_USAGE_Y, self._float_to_axis(throttle), "throttle"):
+                self._cache['throttle'] = throttle
+                self._update_count += 1
         
         if self._cache['brake'] != brake:
-            self.device.set_axis(pyvjoy.HID_USAGE_Z, self._float_to_axis(brake))
-            self._cache['brake'] = brake
-            self._update_count += 1
+            if self._safe_set_axis(pyvjoy.HID_USAGE_Z, self._float_to_axis(brake), "brake"):
+                self._cache['brake'] = brake
+                self._update_count += 1
         
         if self._cache['steering'] != steering:
-            self.device.set_axis(pyvjoy.HID_USAGE_X, self._float_to_axis(steering, center_zero=True))
-            self._cache['steering'] = steering
-            self._update_count += 1
+            if self._safe_set_axis(pyvjoy.HID_USAGE_X, self._float_to_axis(steering, center_zero=True), "steering"):
+                self._cache['steering'] = steering
+                self._update_count += 1
         
         if self._cache['clutch'] != clutch:
-            self.device.set_axis(pyvjoy.HID_USAGE_RZ, self._float_to_axis(clutch))
-            self._cache['clutch'] = clutch
-            self._update_count += 1
+            if self._safe_set_axis(pyvjoy.HID_USAGE_RZ, self._float_to_axis(clutch), "clutch"):
+                self._cache['clutch'] = clutch
+                self._update_count += 1
     
     def get_stats(self):
         """
