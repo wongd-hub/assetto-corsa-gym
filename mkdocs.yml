@@ -1,0 +1,93 @@
+site_name: AC Bridge
+site_description: Clean plumbing layer for Assetto Corsa RL environments
+site_url: https://wongd-hub.github.io/ac-bridge/
+repo_url: https://github.com/wongd-hub/assetto-corsa-gym
+repo_name: assetto-corsa-gym
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - scheme: default
+      primary: deep orange
+      accent: orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - scheme: slate
+      primary: deep orange
+      accent: orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - toc.follow
+    - toc.integrate
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+  - def_list
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Quick Start: getting-started.md
+      - Installation: installation.md
+  - Core API:
+      - Overview: api/overview.md
+      - ACBridgeLocal: api/bridge-local.md
+      - RealTimeStepper: api/stepper.md
+      - Action Smoothing: api/action-smoothing.md
+  - Systems:
+      - Telemetry: systems/telemetry.md
+      - Control: systems/control.md
+      - Timing & Protocol: systems/timing-protocol.md
+  - Advanced:
+      - Cloud Training: advanced/cloud-setup.md
+      - WebSocket Protocol: advanced/protocol.md
+  - Examples: examples.md
+
+plugins:
+  - search:
+      lang: en
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/wongd-hub
+  generator: false
+
+copyright: Copyright &copy; 2026 - Built with MkDocs Material
+
